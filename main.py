@@ -5,7 +5,7 @@ from aiogram.utils.executor import start_webhook
 import gspread
 
 # --- Налаштування ---
-TOKEN = "7723807988:AAFkvUeQn62VWJm3xoH_wOQrwfkLyZgkmZc"
+TOKEN = TELEGRAM_TOKEN
 WEBHOOK_PATH = '/webhook'
 WEBHOOK_URL = os.getenv('WEBHOOK_URL', '') + WEBHOOK_PATH
 SPREADSHEET_ID = '1ponbZwTOObCwcx3pn2LtQ7jLFK5QKvKx5TF4b51ARrg'
