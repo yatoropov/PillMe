@@ -1,27 +1,31 @@
 import asyncio
 import os
+import datetime
+import pytz  # pip install pytz
 from aiogram import Bot, Dispatcher, types, F
 import gspread
 from dotenv import load_dotenv
 import openai
 
-# Завантажити .env змінні
+# 1. Завантаження змінних середовища
 load_dotenv()
-
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# 2. Ініціалізація Telegram-бота та Google Sheets
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
-
-# Google Sheets ініціалізація
 gc = gspread.service_account(filename='service_account.json')
 sheet = gc.open_by_key(SPREADSHEET_ID).sheet1
 
-# OpenAI клієнт
+# 3. OpenAI клієнт
 openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
+# 4. Таймзона Києва
+KYIV_TZ = pytz.timezone("Europe/Kyiv")
+
+# 5. Функція розбору тексту через OpenAI
 async def parse_message(text: str) -> dict:
     prompt = f"""
 Ти асистент-бот, який допомагає записувати прийом ліків.
@@ -36,7 +40,6 @@ async def parse_message(text: str) -> dict:
 
 Ось текст: {text}
 """
-    # Синхронний клієнт — обгортаємо через asyncio.to_thread
     resp = await asyncio.to_thread(
         openai_client.chat.completions.create,
         model="gpt-3.5-turbo",
@@ -45,7 +48,7 @@ async def parse_message(text: str) -> dict:
         max_tokens=100,
     )
     answer = resp.choices[0].message.content
-    # Парсимо ключ:значення
+    # Примітивний парсер ключ:значення
     result = {}
     for line in answer.split('\n'):
         if ':' in line:
@@ -53,23 +56,29 @@ async def parse_message(text: str) -> dict:
             result[k.strip().lower()] = v.strip()
     return result
 
+# 6. Головний хендлер повідомлень
 @dp.message(F.text)
 async def handle_message(message: types.Message):
     text = message.text.strip()
     user = message.from_user.username or str(message.from_user.id)
 
     parsed = await parse_message(text)
+    # Обробка часу: якщо "зараз" або пусто — підставляємо поточну дату й час Києва
+    time_str = parsed.get('час', '').lower()
+    if time_str == "зараз" or not time_str:
+        now = datetime.datetime.now(KYIV_TZ)
+        time_str = now.strftime("%d.%m.%Y %H:%M")
     # Формуємо рядок для таблиці
     row = [
         user,
         parsed.get('назва', ''),
         parsed.get('кількість', ''),
-        parsed.get('час', ''),
+        time_str,
         text  # оригінальний текст
     ]
     sheet.append_row(row)
     await message.reply(
-        f"✅ Додано в таблицю:\nНазва: {parsed.get('назва', '')}\nКількість: {parsed.get('кількість', '')}\nЧас: {parsed.get('час', '')}"
+        f"✅ Додано в таблицю:\nНазва: {parsed.get('назва', '')}\nКількість: {parsed.get('кількість', '')}\nЧас: {time_str}"
     )
 
 async def main():
